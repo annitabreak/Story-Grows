@@ -1,0 +1,5 @@
+{
+  "name": "Dynamic Plane Dynamics Simulator",
+  "description": "An interactive 3D simulation of plane dynamics with four-corner driving parameter mapping, featuring multiple modes like Calm, Magic, Fear, and Joy.",
+  "requestFramePermissions": []
+}
