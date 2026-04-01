@@ -226,8 +226,9 @@ export default function App() {
             let zVal = 0;
             
             if (mode === 'TENSION') {
-              const baseFreq = f * 10;
-              const jitter = (Math.sin(t * baseFreq * Math.PI * 2) * 0.7) + (Math.sin(t * baseFreq * 2.3 * Math.PI * 2) * 0.3);
+              // Refined jitter logic: high frequency regardless of base f
+              const jitterFreq = 15; // Fixed fast frequency for tension
+              const jitter = (Math.sin(t * jitterFreq * Math.PI * 2) * 0.7) + (Math.sin(t * jitterFreq * 2.3 * Math.PI * 2) * 0.3);
               zVal = jitter * (A * 0.15);
               const u = idx % 2 === 0 ? 0 : 1;
               zVal += Math.sin(u * 10 + t * 5) * (A * 0.05);
@@ -279,7 +280,7 @@ export default function App() {
         break;
       case 'TENSION':
         setAmplitude(15);
-        setFrequency(1.2);
+        setFrequency(0.15);
         setPhaseShift(0);
         break;
       case 'JOY':
@@ -296,7 +297,10 @@ export default function App() {
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
       {/* Header Overlay */}
-      <div className="absolute top-8 left-8 z-10 pointer-events-none">
+      <div 
+        className="absolute top-8 left-8 z-10 pointer-events-auto"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -306,12 +310,15 @@ export default function App() {
             <RefreshCw className="w-6 h-6 text-blue-400 animate-spin-slow" />
             Kinematic Parameter Mapping
           </h1>
-          <p className="text-sm text-slate-400 font-medium">Dynamic Plane Dynamics Simulator V1.3</p>
+          <p className="text-sm text-slate-400 font-medium">Dynamic Plane Dynamics Simulator V1.4</p>
         </motion.div>
       </div>
 
       {/* Bottom Right Control Panel */}
-      <div className="absolute bottom-8 right-8 z-20 w-80">
+      <div 
+        className="absolute bottom-8 right-8 z-20 w-80"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -421,7 +428,10 @@ export default function App() {
       </div>
 
       {/* Tooltip */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10">
+      <div 
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/50 backdrop-blur-md rounded-full border border-slate-800 text-[10px] text-slate-500 uppercase tracking-widest font-bold">
           <Info className="w-3 h-3" />
           鼠标左键拖拽旋转视角 | 滚轮缩放
