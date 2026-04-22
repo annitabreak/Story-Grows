@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, Play, Pause, RefreshCw, Layers, Info, Wind, ChevronRight, PlayCircle } from 'lucide-react';
 
-type Mode = 'CALM' | 'HAPPY' | 'SAD' | 'NERVOUS' | 'ANGRY' | 'SURPRISED' | 'MAGIC';
+type Mode = 'CALM' | 'JOY_1' | 'JOY_2' | 'SAD' | 'NERVOUS' | 'ANGRY' | 'SURPRISED' | 'MAGIC';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -232,24 +232,21 @@ export default function App() {
             }
             return 0;
           }
-          case 'HAPPY': {
-            const loopTime = 12.0;
-            const phase1End = 7.0;
-            const localTime = time % loopTime;
-            if (localTime < phase1End) {
-              const seqIdx = lrSequence.indexOf(idx);
-              const progress = localTime / phase1End;
-              const delay = seqIdx * 0.15;
-              const waveVal = Math.sin((progress * 10) - delay * 6);
-              return A * Math.max(0, waveVal) * intensity * 0.6;
-            } else {
-              const altTime = localTime - phase1End;
-              const freq = 1.5 * intensity;
-              const val = Math.sin(altTime * freq * Math.PI * 2);
-              const smoothVal = val * val * (3 - 2 * Math.abs(val)) * (val > 0 ? 1 : -1);
-              if (idx < 3) return smoothVal > 0 ? smoothVal * A * 0.5 : 0;
-              return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.5 : 0;
-            }
+          case 'JOY_1': {
+            const cycleTime = 8.0; 
+            const localTime = time % cycleTime;
+            const seqIdx = lrSequence.indexOf(idx);
+            const progress = localTime / cycleTime;
+            const delay = seqIdx * 0.15;
+            const waveVal = Math.sin((progress * 10) - delay * 6);
+            return A * Math.max(0, waveVal) * intensity * 0.7;
+          }
+          case 'JOY_2': {
+            const freq = 1.2 * intensity;
+            const val = Math.sin(time * freq * Math.PI * 2);
+            const smoothVal = val * val * (3 - 2 * Math.abs(val)) * (val > 0 ? 1 : -1);
+            if (idx < 3) return smoothVal > 0 ? smoothVal * A * 0.5 : 0;
+            return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.5 : 0;
           }
           case 'SAD': {
             const cycle = 8.0;
@@ -396,12 +393,16 @@ export default function App() {
         setAmplitude(12);
         setFrequency(0.3);
         break;
-      case 'HAPPY':
+      case 'JOY_1':
+        setAmplitude(24);
+        setFrequency(0.5);
+        break;
+      case 'JOY_2':
         setAmplitude(18);
         setFrequency(0.5);
         break;
       case 'SAD':
-        setAmplitude(14);
+        setAmplitude(20);
         setFrequency(0.2);
         break;
       case 'NERVOUS':
@@ -478,7 +479,7 @@ export default function App() {
 
           {/* Mode Selector */}
           <div className="grid grid-cols-2 gap-2 mb-10">
-            {(['CALM', 'HAPPY', 'SAD', 'NERVOUS', 'ANGRY', 'SURPRISED', 'MAGIC'] as Mode[]).map((m) => (
+            {(['CALM', 'JOY_1', 'JOY_2', 'SAD', 'NERVOUS', 'ANGRY', 'SURPRISED', 'MAGIC'] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => handleModeChange(m)}
@@ -489,7 +490,8 @@ export default function App() {
                 }`}
               >
                 {m === 'CALM' ? '宁静 CALM' : 
-                 m === 'HAPPY' ? '欢快 HAPPY' : 
+                 m === 'JOY_1' ? '欢快 JOY.1' : 
+                 m === 'JOY_2' ? '欢快 JOY.2' : 
                  m === 'SAD' ? '忧伤 SAD' : 
                  m === 'NERVOUS' ? '紧张 NERVOUS' : 
                  m === 'ANGRY' ? '愤怒 ANGRY' :
