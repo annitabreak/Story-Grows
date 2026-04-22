@@ -307,12 +307,12 @@ export default function App() {
             return 0;
           }
           case 'MAGIC': {
-            const cycle = 10.0;
+            const cycle = 14.0; // Slower cycle
             const tMod = time % cycle;
             const seqIdx = lrSequence.indexOf(idx);
-            const speedFact = 1 + (tMod / cycle) * 2;
-            const val = Math.sin(tMod * speedFact * 4 - seqIdx * 2.0);
-            return A * 0.5 * Math.max(0, val) * intensity;
+            const speedFact = 1 + (tMod / cycle) * 1.5; // Gentler acceleration
+            const val = Math.sin(tMod * speedFact * 2.5 - seqIdx * 2.2);
+            return A * 0.7 * Math.max(0, val) * intensity;
           }
           default: return 0;
         }
@@ -395,31 +395,31 @@ export default function App() {
     setMode(newMode);
     switch (newMode) {
       case 'CALM':
-        setAmplitude(8);
+        setAmplitude(12);
         setFrequency(0.3);
         break;
       case 'HAPPY':
-        setAmplitude(12);
+        setAmplitude(18);
         setFrequency(0.5);
         break;
       case 'SAD':
-        setAmplitude(10);
+        setAmplitude(14);
         setFrequency(0.2);
         break;
       case 'NERVOUS':
-        setAmplitude(6);
+        setAmplitude(10);
         setFrequency(0.6);
         break;
       case 'ANGRY':
-        setAmplitude(14);
+        setAmplitude(22);
         setFrequency(0.8);
         break;
       case 'SURPRISED':
-        setAmplitude(16);
+        setAmplitude(24);
         setFrequency(0.5);
         break;
       case 'MAGIC':
-        setAmplitude(12);
+        setAmplitude(18);
         setFrequency(0.5);
         break;
     }
