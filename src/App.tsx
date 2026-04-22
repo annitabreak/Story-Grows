@@ -3,14 +3,13 @@ import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, Play, Pause, RefreshCw, Layers, Info, Wind, ChevronRight, PlayCircle } from 'lucide-react';
 
-type Mode = 'CALM' | 'MAGIC' | 'TENSION' | 'JOY';
+type Mode = 'CALM' | 'HAPPY' | 'SAD' | 'NERVOUS' | 'ANGRY' | 'SURPRISED' | 'MAGIC';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>('CALM');
   const [amplitude, setAmplitude] = useState(20);
-  const [frequency, setFrequency] = useState(0.15);
-  const [phaseShift, setPhaseShift] = useState(0);
+  const [frequency, setFrequency] = useState(0.8); // Used as intensity multiplier usually
   const [showWireframe, setShowWireframe] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -32,6 +31,23 @@ export default function App() {
   const planeHeight = 45;
   const segmentsX = 40;
   const segmentsY = 22;
+
+  // Servo mapping from C++ code: S1, S2, S3 (top row) and S4, S5, S6 (bottom row)
+  // Ordered from left to right as described: S1(0), S4(3), S2(1), S5(4), S3(2), S6(5)
+  // Mapping to UV coordinates:
+  // S1: (0, 1)   S2: (0.5, 1)   S3: (1, 1)
+  // S4: (0, 0)   S5: (0.5, 0)   S6: (1, 0)
+  const servoPositions = [
+    { u: 0.0, v: 1.0 }, // S1 Index 0
+    { u: 0.5, v: 1.0 }, // S2 Index 1
+    { u: 1.0, v: 1.0 }, // S3 Index 2
+    { u: 0.0, v: 0.0 }, // S4 Index 3
+    { u: 0.5, v: 0.0 }, // S5 Index 4
+    { u: 1.0, v: 0.0 }, // S6 Index 5
+  ];
+  
+  // LR sequence from C++: S1(0), S4(3), S2(1), S5(4), S3(2), S6(5)
+  const lrSequence = [0, 3, 1, 4, 2, 5];
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -115,20 +131,15 @@ export default function App() {
     scene.add(wireframeMesh);
     wireframeMeshRef.current = wireframeMesh;
 
-    // Create Corner Markers (Hollow Circles)
+    // Create 6 markers for 6 servos
     const ringGeo = new THREE.RingGeometry(1.8, 2.2, 32);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xf472b6, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
     const markers: THREE.Mesh[] = [];
 
-    const cornerPositions = [
-      [-planeWidth / 2, -planeHeight / 2], // BL
-      [planeWidth / 2, -planeHeight / 2],  // BR
-      [-planeWidth / 2, planeHeight / 2],  // TL
-      [planeWidth / 2, planeHeight / 2],   // TR
-    ];
-
-    cornerPositions.forEach(([x, y]) => {
+    servoPositions.forEach((pos) => {
       const ring = new THREE.Mesh(ringGeo, ringMat);
+      const x = (pos.u - 0.5) * planeWidth;
+      const y = (pos.v - 0.5) * planeHeight;
       ring.position.set(x, y, 0);
       scene.add(ring);
       markers.push(ring);
@@ -205,8 +216,115 @@ export default function App() {
       const vertexCount = positionAttribute.count;
 
       const A = amplitude * 0.5;
-      const f = frequency;
-      const phase = phaseShift * (Math.PI / 180);
+      const intensity = frequency;
+
+      // Helper to compute servo Z based on mode and time
+      const getServoZ = (idx: number, time: number) => {
+        // idx is 0-5 mapping to S1, S2, S3, S4, S5, S6
+        switch (mode) {
+          case 'CALM': {
+            // Calm: Sequential slow pulses: S1->S4->S2->S5->S3->S6
+            const seqIdx = lrSequence.indexOf(idx);
+            const cycleTime = 4.0;
+            const pulseDuration = cycleTime / 6;
+            const myStartTime = seqIdx * pulseDuration;
+            const localTime = (time % cycleTime) - myStartTime;
+            if (localTime > 0 && localTime < pulseDuration) {
+              return A * Math.sin((localTime / pulseDuration) * Math.PI) * intensity;
+            }
+            return 0;
+          }
+          case 'HAPPY': {
+            const loopTime = 7.0;
+            const phase1End = 4.5;
+            const localTime = time % loopTime;
+            if (localTime < phase1End) {
+              // L->R Wave pulse flow
+              const seqIdx = lrSequence.indexOf(idx);
+              const progress = localTime / phase1End;
+              const delay = seqIdx * 0.12;
+              const waveVal = Math.sin((progress * 15) - delay * 10);
+              return A * Math.max(0, waveVal) * intensity;
+            } else {
+              // Alternating Top vs Bottom row
+              const altTime = localTime - phase1End;
+              const freq = 4 * intensity;
+              const val = Math.sin(altTime * freq * Math.PI * 2);
+              if (idx < 3) return val > 0 ? A : 0; // S1, S2, S3
+              return val < 0 ? A : 0; // S4, S5, S6
+            }
+          }
+          case 'SAD': {
+            // Push mid (S2/S5) harder than corners. Slow push, hold, return.
+            const cycle = 4.0;
+            const tMod = time % cycle;
+            let val = 0;
+            if (tMod < 1.5) val = (tMod / 1.5);
+            else if (tMod < 2.5) val = 1.0;
+            else if (tMod < 3.5) val = 1.0 - (tMod - 2.5);
+            else val = 0;
+            
+            const boost = (idx === 1 || idx === 4) ? 1.4 : 0.8;
+            return A * val * boost * intensity;
+          }
+          case 'NERVOUS': {
+            const cycle = 5.0;
+            const tMod = time % cycle;
+            if (tMod < 3.0) {
+              // Left (S1, S4) vs Right (S3, S6) alternating fast
+              const freq = 8 * intensity;
+              const val = Math.sin(tMod * freq * Math.PI * 2);
+              if (idx === 0 || idx === 3) return val > 0 ? A * 0.5 : 0;
+              if (idx === 2 || idx === 5) return val < 0 ? A * 0.5 : 0;
+              return 0;
+            } else {
+              // Middle (S2, S5) tremble
+              const freq = 20 * intensity;
+              const val = Math.sin(tMod * freq * Math.PI * 2);
+              if (idx === 1 || idx === 4) return val * A * 0.2;
+              return 0;
+            }
+          }
+          case 'ANGRY': {
+            // Sharp pair pulses: (S1, S4) then (S3, S6)
+            const cycle = 1.2;
+            const tMod = time % cycle;
+            const pair1 = tMod < 0.4;
+            const pair2 = tMod > 0.6 && tMod < 1.0;
+            if (pair1 && (idx === 0 || idx === 3)) return A * intensity;
+            if (pair2 && (idx === 2 || idx === 5)) return A * intensity;
+            return 0;
+          }
+          case 'SURPRISED': {
+            // Burst, hold, eco bounces
+            const cycle = 5.0;
+            const tMod = time % cycle;
+            if (tMod < 0.3) return A * intensity * (tMod / 0.3);
+            if (tMod < 1.2) return A * intensity;
+            if (tMod < 1.5) return A * intensity * (1 - (tMod - 1.2) / 0.3);
+            if (tMod < 1.7) return 0;
+            const echoTime = tMod - 1.7;
+            if (echoTime < 2.5) {
+              const freq = 10;
+              const decay = Math.exp(-echoTime * 2);
+              return A * 0.5 * decay * Math.abs(Math.sin(echoTime * freq * Math.PI)) * intensity;
+            }
+            return 0;
+          }
+          case 'MAGIC': {
+            const cycle = 6.0;
+            const tMod = time % cycle;
+            const seqIdx = lrSequence.indexOf(idx);
+            const speedFact = 1 + (tMod / cycle) * 4;
+            const val = Math.sin(tMod * speedFact * 8 - seqIdx * 1.5);
+            return A * 0.8 * Math.max(0, val) * intensity;
+          }
+          default: return 0;
+        }
+      };
+
+      // Compute 6 servo Z values
+      const servoZs = [0, 1, 2, 3, 4, 5].map(i => getServoZ(i, t));
 
       for (let i = 0; i < vertexCount; i++) {
         const x = positionAttribute.getX(i);
@@ -216,50 +334,37 @@ export default function App() {
         const v = (y + planeHeight / 2) / planeHeight;
 
         let z = 0;
-
-        if (mode === 'TENSION') {
-          const jitterFreq = 15;
-          const jitter = (Math.sin(t * jitterFreq * Math.PI * 2) * 0.7) + (Math.sin(t * jitterFreq * 2.3 * Math.PI * 2) * 0.3);
-          z = jitter * (A * 0.15);
-          z += Math.sin(u * 10 + t * 5) * (A * 0.05);
+        
+        // Bicubic/Bilinear interpolation between the 6 servo points
+        if (u < 0.5) {
+          const uNorm = u / 0.5;
+          // Interpolate Top row: S1(0) to S2(1)
+          // Interpolate Bottom row: S4(3) to S5(4)
+          const zTop = (1 - uNorm) * servoZs[0] + uNorm * servoZs[1];
+          const zBot = (1 - uNorm) * servoZs[3] + uNorm * servoZs[4];
+          z = (1 - v) * zBot + v * zTop;
         } else {
-          const Z_BL = A * Math.sin(2 * Math.PI * f * t + 0 * phase);
-          const Z_BR = A * Math.sin(2 * Math.PI * f * t + 1 * phase);
-          const Z_TL = A * Math.sin(2 * Math.PI * f * t + 2 * phase);
-          const Z_TR = A * Math.sin(2 * Math.PI * f * t + 3 * phase);
-
-          z = (1 - u) * (1 - v) * Z_BL +
-            u * (1 - v) * Z_BR +
-            (1 - u) * v * Z_TL +
-            u * v * Z_TR;
+          const uNorm = (u - 0.5) / 0.5;
+          // Interpolate Top row: S2(1) to S3(2)
+          // Interpolate Bottom row: S5(4) to S6(5)
+          const zTop = (1 - uNorm) * servoZs[1] + uNorm * servoZs[2];
+          const zBot = (1 - uNorm) * servoZs[4] + uNorm * servoZs[5];
+          z = (1 - v) * zBot + v * zTop;
         }
 
         positionAttribute.setZ(i, z);
       }
 
-      // Update corner markers
-      if (cornerMarkersRef.current.length === 4) {
+      // Update servo markers
+      if (cornerMarkersRef.current.length === 6) {
         if (planeRef.current) {
           cornerMarkersRef.current.forEach((marker, idx) => {
             marker.rotation.copy(planeRef.current!.rotation);
-            let zVal = 0;
+            const zVal = servoZs[idx];
+            const pos = servoPositions[idx];
             
-            if (mode === 'TENSION') {
-              const jitterFreq = 15;
-              const jitter = (Math.sin(t * jitterFreq * Math.PI * 2) * 0.7) + (Math.sin(t * jitterFreq * 2.3 * Math.PI * 2) * 0.3);
-              zVal = jitter * (A * 0.15);
-              const u = idx % 2 === 0 ? 0 : 1;
-              zVal += Math.sin(u * 10 + t * 5) * (A * 0.05);
-            } else {
-              const Z_BL = A * Math.sin(2 * Math.PI * f * t + 0 * phase);
-              const Z_BR = A * Math.sin(2 * Math.PI * f * t + 1 * phase);
-              const Z_TL = A * Math.sin(2 * Math.PI * f * t + 2 * phase);
-              const Z_TR = A * Math.sin(2 * Math.PI * f * t + 3 * phase);
-              zVal = idx === 0 ? Z_BL : idx === 1 ? Z_BR : idx === 2 ? Z_TL : Z_TR;
-            }
-            
-            const x = idx % 2 === 0 ? -planeWidth / 2 : planeWidth / 2;
-            const y = idx < 2 ? -planeHeight / 2 : planeHeight / 2;
+            const x = (pos.u - 0.5) * planeWidth;
+            const y = (pos.v - 0.5) * planeHeight;
             
             const vector = new THREE.Vector3(x, y, zVal);
             vector.applyEuler(planeRef.current!.rotation);
@@ -286,30 +391,38 @@ export default function App() {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [mode, amplitude, frequency, phaseShift, isPaused]);
+  }, [mode, amplitude, frequency, isPaused]);
 
   const handleModeChange = (newMode: Mode) => {
     setMode(newMode);
     switch (newMode) {
       case 'CALM':
         setAmplitude(20);
-        setFrequency(0.15);
-        setPhaseShift(0);
+        setFrequency(0.8);
+        break;
+      case 'HAPPY':
+        setAmplitude(30);
+        setFrequency(1.0);
+        break;
+      case 'SAD':
+        setAmplitude(25);
+        setFrequency(0.5);
+        break;
+      case 'NERVOUS':
+        setAmplitude(20);
+        setFrequency(1.2);
+        break;
+      case 'ANGRY':
+        setAmplitude(35);
+        setFrequency(1.4);
+        break;
+      case 'SURPRISED':
+        setAmplitude(40);
+        setFrequency(1.0);
         break;
       case 'MAGIC':
-        setAmplitude(35);
-        setFrequency(0.25);
-        setPhaseShift(90);
-        break;
-      case 'TENSION':
-        setAmplitude(15);
-        setFrequency(0.15);
-        setPhaseShift(0);
-        break;
-      case 'JOY':
-        setAmplitude(25);
+        setAmplitude(30);
         setFrequency(1.0);
-        setPhaseShift(180);
         break;
     }
   };
@@ -368,25 +481,31 @@ export default function App() {
           </div>
 
           {/* Mode Selector */}
-          <div className="grid grid-cols-2 gap-3 mb-10">
-            {(['CALM', 'MAGIC', 'TENSION', 'JOY'] as Mode[]).map((m) => (
+          <div className="grid grid-cols-2 gap-2 mb-10">
+            {(['CALM', 'HAPPY', 'SAD', 'NERVOUS', 'ANGRY', 'SURPRISED', 'MAGIC'] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => handleModeChange(m)}
-                className={`py-3 px-4 rounded-2xl text-[10px] font-bold tracking-wider transition-all border ${
+                className={`py-3 px-2 rounded-2xl text-[9px] font-bold tracking-wider transition-all border ${
                   mode === m
                     ? 'bg-brand-pink border-brand-pink text-white shadow-lg shadow-brand-pink/30'
                     : 'bg-white/40 border-white/60 text-slate-500 hover:bg-white/60'
                 }`}
               >
-                {m === 'CALM' ? '宁静 CALM' : m === 'MAGIC' ? '幻妙 MAGIC' : m === 'TENSION' ? '紧张 TENSION' : '欢欣 JOY'}
+                {m === 'CALM' ? '宁静 CALM' : 
+                 m === 'HAPPY' ? '欢快 HAPPY' : 
+                 m === 'SAD' ? '忧伤 SAD' : 
+                 m === 'NERVOUS' ? '紧张 NERVOUS' : 
+                 m === 'ANGRY' ? '愤怒 ANGRY' :
+                 m === 'SURPRISED' ? '惊讶 SURPRISED' :
+                 '奇幻 MAGIC'}
               </button>
             ))}
           </div>
 
           {/* Sliders */}
-          <div className="space-y-8">
-            <div className="space-y-4">
+          <div className="space-y-6">
+            <div className="space-y-3">
               <div className="flex justify-between text-[10px] font-bold tracking-widest uppercase text-slate-400">
                 <span>Amplitude</span>
                 <span className="text-brand-pink">{amplitude} mm</span>
@@ -407,10 +526,10 @@ export default function App() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex justify-between text-[10px] font-bold tracking-widest uppercase text-slate-400">
-                <span>Frequency</span>
-                <span className="text-brand-purple">{frequency.toFixed(2)} Hz</span>
+                <span>Intensity</span>
+                <span className="text-brand-purple">{(frequency * 100).toFixed(0)}%</span>
               </div>
               <div className="relative h-1.5 w-full bg-white/60 rounded-full overflow-hidden">
                 <div 
@@ -424,28 +543,6 @@ export default function App() {
                   step="0.05"
                   value={frequency}
                   onChange={(e) => setFrequency(Number(e.target.value))}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex justify-between text-[10px] font-bold tracking-widest uppercase text-slate-400">
-                <span>Phase Shift</span>
-                <span className="text-brand-blue">{phaseShift}°</span>
-              </div>
-              <div className="relative h-1.5 w-full bg-white/60 rounded-full overflow-hidden">
-                <div 
-                  className="absolute top-0 left-0 h-full bg-brand-blue transition-all"
-                  style={{ width: `${(phaseShift / 180) * 100}%` }}
-                />
-                <input
-                  type="range"
-                  min="0"
-                  max="180"
-                  step="15"
-                  value={phaseShift}
-                  onChange={(e) => setPhaseShift(Number(e.target.value))}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
               </div>
