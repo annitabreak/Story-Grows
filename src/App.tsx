@@ -328,20 +328,18 @@ export default function App() {
         let z = 0;
         let totalW = 0;
         
-        // Shepard's method (Inverse distance weighting) with temporal lag
-        // This simulates wave propagation from the control points across a flexible membrane.
+        // Shepard's method (Inverse distance weighting) - removing lag to stiffen feel
+        // This simulates a flexible membrane with more tension.
         for (let j = 0; j < 6; j++) {
             const pos = servoPositions[j];
             const distU = u - pos.u;
-            const distV = (v - pos.v) * 1.5; // Scale V distance to favor horizontal flow
+            const distV = (v - pos.v); 
             const d = Math.sqrt(distU * distU + distV * distV);
             
-            // Weight falloff
-            const w = 1.0 / (Math.pow(d, 3) + 0.05); // Rapid fallback for localized control
+            // Smoother weight falloff for more global tension
+            const w = 1.0 / (Math.pow(d, 2.5) + 0.1); 
             
-            // Phase lag: the further the vertex from the servo, the more it lags in time.
-            const lag = d * 0.8;
-            z += getSingleServoZAt(j, t - lag) * w;
+            z += getSingleServoZAt(j, t) * w;
             totalW += w;
         }
         
