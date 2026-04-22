@@ -122,9 +122,9 @@ export default function App() {
     // Separate Wireframe for better visibility
     const wireframeGeo = new THREE.WireframeGeometry(geometry);
     const wireframeMat = new THREE.LineBasicMaterial({ 
-      color: 0xc084fc, 
+      color: 0xffffff, 
       transparent: true, 
-      opacity: 0.4,
+      opacity: 0.8,
     });
     const wireframeMesh = new THREE.LineSegments(wireframeGeo, wireframeMat);
     wireframeMesh.visible = false;
@@ -343,7 +343,7 @@ export default function App() {
             totalW += w;
         }
         
-        z = z / totalW;
+        z = (z / totalW) * 1.5; // Amplify plane motion specifically
 
         positionAttribute.setZ(i, z);
       }
