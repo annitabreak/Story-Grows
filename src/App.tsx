@@ -29,8 +29,8 @@ export default function App() {
   // Constants for geometry
   const planeWidth = 80;
   const planeHeight = 45;
-  const segmentsX = 40;
-  const segmentsY = 22;
+  const segmentsX = 60;
+  const segmentsY = 34;
 
   // Servo mapping from C++ code: S1, S2, S3 (top row) and S4, S5, S6 (bottom row)
   // Ordered from left to right as described: S1(0), S4(3), S2(1), S5(4), S3(2), S6(5)
@@ -218,14 +218,12 @@ export default function App() {
       const A = amplitude * 0.5;
       const intensity = frequency;
 
-      // Helper to compute servo Z based on mode and time
-      const getServoZ = (idx: number, time: number) => {
-        // idx is 0-5 mapping to S1, S2, S3, S4, S5, S6
+      // Helper to compute a single servo's target Z at a specific time
+      const getSingleServoZAt = (idx: number, time: number) => {
         switch (mode) {
           case 'CALM': {
-            // Calm: Sequential slow pulses: S1->S4->S2->S5->S3->S6
             const seqIdx = lrSequence.indexOf(idx);
-            const cycleTime = 6.0; // Slower for gentler feel
+            const cycleTime = 7.0; 
             const pulseDuration = cycleTime / 6;
             const myStartTime = seqIdx * pulseDuration;
             const localTime = (time % cycleTime) - myStartTime;
@@ -235,101 +233,90 @@ export default function App() {
             return 0;
           }
           case 'HAPPY': {
-            const loopTime = 10.0; // Slower
-            const phase1End = 6.0;
+            const loopTime = 12.0;
+            const phase1End = 7.0;
             const localTime = time % loopTime;
             if (localTime < phase1End) {
-              // L->R Wave pulse flow
               const seqIdx = lrSequence.indexOf(idx);
               const progress = localTime / phase1End;
               const delay = seqIdx * 0.15;
-              const waveVal = Math.sin((progress * 12) - delay * 8);
-              return A * Math.max(0, waveVal) * intensity * 0.8;
+              const waveVal = Math.sin((progress * 10) - delay * 6);
+              return A * Math.max(0, waveVal) * intensity * 0.6;
             } else {
-              // Alternating Top vs Bottom row - smoother transition
               const altTime = localTime - phase1End;
-              const freq = 2 * intensity;
+              const freq = 1.5 * intensity;
               const val = Math.sin(altTime * freq * Math.PI * 2);
               const smoothVal = val * val * (3 - 2 * Math.abs(val)) * (val > 0 ? 1 : -1);
-              if (idx < 3) return smoothVal > 0 ? smoothVal * A * 0.7 : 0;
-              return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.7 : 0;
+              if (idx < 3) return smoothVal > 0 ? smoothVal * A * 0.5 : 0;
+              return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.5 : 0;
             }
           }
           case 'SAD': {
-            // Push mid (S2/S5) harder than corners. Very slow.
-            const cycle = 6.0;
+            const cycle = 8.0;
             const tMod = time % cycle;
             let val = 0;
-            if (tMod < 2.0) val = (tMod / 2.0);
-            else if (tMod < 3.5) val = 1.0;
-            else if (tMod < 5.5) val = 1.0 - (tMod - 3.5) / 2.0;
+            if (tMod < 2.5) val = (tMod / 2.5);
+            else if (tMod < 4.0) val = 1.0;
+            else if (tMod < 6.5) val = 1.0 - (tMod - 4.0) / 2.5;
             else val = 0;
-            
-            // Smooth the value
             const smoothVal = val * val * (3 - 2 * val);
-            const boost = (idx === 1 || idx === 4) ? 1.2 : 0.6;
+            const boost = (idx === 1 || idx === 4) ? 1.0 : 0.5;
             return A * smoothVal * boost * intensity;
           }
           case 'NERVOUS': {
-            const cycle = 6.0;
+            const cycle = 7.0;
             const tMod = time % cycle;
-            if (tMod < 3.5) {
-              // Left (S1, S4) vs Right (S3, S6) alternating gently
-              const freq = 4 * intensity;
+            if (tMod < 4.5) {
+              const freq = 3 * intensity;
               const val = Math.sin(tMod * freq * Math.PI * 2);
               const smoothVal = val * val * (3 - 2 * Math.abs(val)) * (val > 0 ? 1 : -1);
-              if (idx === 0 || idx === 3) return smoothVal > 0 ? smoothVal * A * 0.4 : 0;
-              if (idx === 2 || idx === 5) return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.4 : 0;
+              if (idx === 0 || idx === 3) return smoothVal > 0 ? smoothVal * A * 0.3 : 0;
+              if (idx === 2 || idx === 5) return smoothVal < 0 ? Math.abs(smoothVal) * A * 0.3 : 0;
               return 0;
             } else {
-              // Middle (S2, S5) gentle tremble
-              const freq = 12 * intensity;
+              const freq = 10 * intensity;
               const val = Math.sin(tMod * freq * Math.PI * 2);
-              if (idx === 1 || idx === 4) return val * A * 0.15;
+              if (idx === 1 || idx === 4) return val * A * 0.1;
               return 0;
             }
           }
           case 'ANGRY': {
-            // Rhythmic pair pulses, softer edges
-            const cycle = 2.0;
+            const cycle = 3.0;
             const tMod = time % cycle;
-            const freq = 2;
+            const freq = 1.5;
             const val = Math.sin(tMod * freq * Math.PI * 2);
-            const gate = 0.4;
-            if (val > gate && (idx === 0 || idx === 3)) return A * intensity * ((val - gate) / (1 - gate));
-            if (val < -gate && (idx === 2 || idx === 5)) return A * intensity * ((Math.abs(val) - gate) / (1 - gate));
+            const gate = 0.5;
+            const smoothed = val > gate ? (val - gate) / (1 - gate) : (val < -gate ? (Math.abs(val) - gate) / (1 - gate) : 0);
+            const finalVal = smoothed * smoothed * (3 - 2 * smoothed);
+            if (val > gate && (idx === 0 || idx === 3)) return finalVal * A * intensity * 0.7;
+            if (val < -gate && (idx === 2 || idx === 5)) return finalVal * A * intensity * 0.7;
             return 0;
           }
           case 'SURPRISED': {
-            // Burst, hold, eco bounces - all softened
-            const cycle = 6.0;
+            const cycle = 8.0;
             const tMod = time % cycle;
-            if (tMod < 0.6) return A * intensity * 0.7 * (tMod / 0.6);
-            if (tMod < 1.5) return A * intensity * 0.7;
-            if (tMod < 2.2) return A * intensity * 0.7 * (1 - (tMod - 1.5) / 0.7);
-            if (tMod < 2.5) return 0;
-            const echoTime = tMod - 2.5;
-            if (echoTime < 3.0) {
-              const freq = 6;
-              const decay = Math.exp(-echoTime * 1.2);
-              return A * 0.3 * decay * Math.abs(Math.sin(echoTime * freq * Math.PI)) * intensity;
+            if (tMod < 0.8) return A * intensity * 0.5 * (tMod / 0.8);
+            if (tMod < 1.8) return A * intensity * 0.5;
+            if (tMod < 2.8) return A * intensity * 0.5 * (1 - (tMod - 1.8) / 1.0);
+            const echoTime = tMod - 2.8;
+            if (echoTime > 0 && echoTime < 4.0) {
+              const freq = 4;
+              const decay = Math.exp(-echoTime * 0.8);
+              return A * 0.25 * decay * Math.abs(Math.sin(echoTime * freq * Math.PI)) * intensity;
             }
             return 0;
           }
           case 'MAGIC': {
-            const cycle = 8.0;
+            const cycle = 10.0;
             const tMod = time % cycle;
             const seqIdx = lrSequence.indexOf(idx);
-            const speedFact = 1 + (tMod / cycle) * 3;
-            const val = Math.sin(tMod * speedFact * 6 - seqIdx * 1.8);
-            return A * 0.6 * Math.max(0, val) * intensity;
+            const speedFact = 1 + (tMod / cycle) * 2;
+            const val = Math.sin(tMod * speedFact * 4 - seqIdx * 2.0);
+            return A * 0.5 * Math.max(0, val) * intensity;
           }
           default: return 0;
         }
       };
-
-      // Compute 6 servo Z values
-      const servoZs = [0, 1, 2, 3, 4, 5].map(i => getServoZ(i, t));
 
       for (let i = 0; i < vertexCount; i++) {
         const x = positionAttribute.getX(i);
@@ -339,30 +326,32 @@ export default function App() {
         const v = (y + planeHeight / 2) / planeHeight;
 
         let z = 0;
+        let totalW = 0;
         
-        // Flexible interpolation using Smoothstep (Hermite)
-        const smooth = (n: number) => n * n * (3 - 2 * n);
-
-        if (u < 0.5) {
-          const uNorm = u / 0.5;
-          const uSmooth = smooth(uNorm);
-          const vSmooth = smooth(v);
-          
-          const zTop = (1 - uSmooth) * servoZs[0] + uSmooth * servoZs[1];
-          const zBot = (1 - uSmooth) * servoZs[3] + uSmooth * servoZs[4];
-          z = (1 - vSmooth) * zBot + vSmooth * zTop;
-        } else {
-          const uNorm = (u - 0.5) / 0.5;
-          const uSmooth = smooth(uNorm);
-          const vSmooth = smooth(v);
-          
-          const zTop = (1 - uSmooth) * servoZs[1] + uSmooth * servoZs[2];
-          const zBot = (1 - uSmooth) * servoZs[4] + uSmooth * servoZs[5];
-          z = (1 - vSmooth) * zBot + vSmooth * zTop;
+        // Shepard's method (Inverse distance weighting) with temporal lag
+        // This simulates wave propagation from the control points across a flexible membrane.
+        for (let j = 0; j < 6; j++) {
+            const pos = servoPositions[j];
+            const distU = u - pos.u;
+            const distV = (v - pos.v) * 1.5; // Scale V distance to favor horizontal flow
+            const d = Math.sqrt(distU * distU + distV * distV);
+            
+            // Weight falloff
+            const w = 1.0 / (Math.pow(d, 3) + 0.05); // Rapid fallback for localized control
+            
+            // Phase lag: the further the vertex from the servo, the more it lags in time.
+            const lag = d * 0.8;
+            z += getSingleServoZAt(j, t - lag) * w;
+            totalW += w;
         }
+        
+        z = z / totalW;
 
         positionAttribute.setZ(i, z);
       }
+
+      // Compute servo markers baseline Z for visuals
+      const servoZs = [0, 1, 2, 3, 4, 5].map(idx => getSingleServoZAt(idx, t));
 
       // Update servo markers
       if (cornerMarkersRef.current.length === 6) {
@@ -406,32 +395,32 @@ export default function App() {
     setMode(newMode);
     switch (newMode) {
       case 'CALM':
-        setAmplitude(15);
-        setFrequency(0.6);
+        setAmplitude(8);
+        setFrequency(0.3);
         break;
       case 'HAPPY':
-        setAmplitude(20);
-        setFrequency(0.8);
+        setAmplitude(12);
+        setFrequency(0.5);
         break;
       case 'SAD':
-        setAmplitude(18);
-        setFrequency(0.4);
+        setAmplitude(10);
+        setFrequency(0.2);
         break;
       case 'NERVOUS':
-        setAmplitude(12);
-        setFrequency(1.0);
+        setAmplitude(6);
+        setFrequency(0.6);
         break;
       case 'ANGRY':
-        setAmplitude(22);
-        setFrequency(1.2);
+        setAmplitude(14);
+        setFrequency(0.8);
         break;
       case 'SURPRISED':
-        setAmplitude(25);
-        setFrequency(0.8);
+        setAmplitude(16);
+        setFrequency(0.5);
         break;
       case 'MAGIC':
-        setAmplitude(20);
-        setFrequency(0.8);
+        setAmplitude(12);
+        setFrequency(0.5);
         break;
     }
   };
